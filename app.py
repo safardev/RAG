@@ -27,6 +27,13 @@ def createEmbedding(text):
 
 app = Flask(__name__)
 
+#Semantic Retrieval - Cosine Similarity Function
+def cosineSimilarity(vecA,vecB):
+    dotProduct=0
+    for i in range(len(vecA)):
+        dotProduct +=vecA[i] * vecB [i]
+    return dotProduct
+
 # Folder where uploaded files will be saved
 UPLOAD_FOLDER = Path("uploads")
 UPLOAD_FOLDER.mkdir(exist_ok=True)
@@ -117,17 +124,28 @@ def read_file():
                     "embedding":embedding
                 })
 
+            #user input question
             question=request.form.get('question')
+
             #converting question into vectors
             questionEmbedding = createEmbedding(question)
 
-            matchedChunk=next((item for item in chunks if "gemini model integration" in item.lower()), None)
-            # em=createEmbedding(matchedChunk)
-            # print(em)
+            #finding best or similar chunk a/c to question
+            bestChunk = None
+            bestScore = float('-inf')
+
+            for items in chunkEmbedding:
+                score = cosineSimilarity(questionEmbedding,items['embedding'])
+                if score > bestScore:
+                    bestChunk = items['text']
+                    bestScore = score
+
+            print(bestScore)
+            print(bestChunk)
 
             response = llm.models.generate_content(
                         model="gemini-3.5-flash-lite",
-                        contents=f"answer the question using context: {matchedChunk.strip()} and question is {question}"
+                        contents=f"answer the question using context: {bestChunk} and question is {question}"
                     )
 
         # Extract text from Word documents
@@ -144,10 +162,8 @@ def read_file():
             }), 415
 
         return jsonify({
-            "quesEM":questionEmbedding,
             "filename": file.filename,
             "content": response.text,
-            "chunks":chunks
         }), 200
 
     except Exception:
