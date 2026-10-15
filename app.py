@@ -18,6 +18,13 @@ GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 #Google LLM
 llm = genai.Client(api_key=GEMINI_KEY)
 
+#create embeddings
+def createEmbedding(text):
+    result = llm.models.embed_content(
+        model="gemini-embedding-2",
+        contents=text)
+    return result.embeddings[0].values
+
 app = Flask(__name__)
 
 # Folder where uploaded files will be saved
@@ -101,23 +108,27 @@ def read_file():
 
             pdf.close()
 
+            #Converting chunk into vectors
+            chunkEmbedding=[]
+            for chunk in chunks:
+                embedding=createEmbedding(chunk)
+                chunkEmbedding.append({
+                    "text":chunk,
+                    "embedding":embedding
+                })
+
+            question=request.form.get('question')
+            #converting question into vectors
+            questionEmbedding = createEmbedding(question)
+
+            matchedChunk=next((item for item in chunks if "gemini model integration" in item.lower()), None)
+            # em=createEmbedding(matchedChunk)
+            # print(em)
+
             response = llm.models.generate_content(
                         model="gemini-3.5-flash-lite",
-                        contents=f"""
-                        Explain the following PDF text in simple language.
-                        Keep the important points and use bullet points where appropriate.
-
-                        PDF text:
-                        {chunks[0]}
-                        """
+                        contents=f"answer the question using context: {matchedChunk.strip()} and question is {question}"
                     )
-
-        # # Split text into a list
-        #     content = [
-        #     re.sub(r"\s+", " ", paragraph).strip()
-        #     for paragraph in re.split(r"\n\s*\n+", raw_text.strip())
-        #     if paragraph.strip()
-        #     ]
 
         # Extract text from Word documents
         elif extension == ".docx":
@@ -133,8 +144,10 @@ def read_file():
             }), 415
 
         return jsonify({
+            "quesEM":questionEmbedding,
             "filename": file.filename,
-            "content": response.text
+            "content": response.text,
+            "chunks":chunks
         }), 200
 
     except Exception:
