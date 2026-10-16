@@ -15,24 +15,26 @@ load_dotenv(env_path)
 
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 
-#Google LLM
+# Google LLM
 llm = genai.Client(api_key=GEMINI_KEY)
 
-#create embeddings
+
+# create embeddings
 def createEmbedding(text):
-    result = llm.models.embed_content(
-        model="gemini-embedding-2",
-        contents=text)
+    result = llm.models.embed_content(model="gemini-embedding-2", contents=text)
     return result.embeddings[0].values
+
 
 app = Flask(__name__)
 
-#Semantic Retrieval - Cosine Similarity Function
-def cosineSimilarity(vecA,vecB):
-    dotProduct=0
+
+# Semantic Retrieval - Cosine Similarity Function
+def cosineSimilarity(vecA, vecB):
+    dotProduct = 0
     for i in range(len(vecA)):
-        dotProduct +=vecA[i] * vecB [i]
+        dotProduct += vecA[i] * vecB[i]
     return dotProduct
+
 
 # Folder where uploaded files will be saved
 UPLOAD_FOLDER = Path("uploads")
@@ -41,16 +43,16 @@ UPLOAD_FOLDER.mkdir(exist_ok=True)
 # Maximum upload size: 16 MB
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
 
+
 @app.route("/")
 def home():
     return "Flask is running"
 
+
 @app.route("/api")
 def get_data():
-    return jsonify({
-        "message": "Hello from Flask!",
-        "status": "success"
-    })
+    return jsonify({"message": "Hello from Flask!", "status": "success"})
+
 
 # @app.route("/uploads",methods=["POST"])
 # def upload_file():
@@ -73,6 +75,7 @@ def get_data():
 #         "message": "File uploaded successfully",
 #         "filename": fileName
 #     }), 201
+
 
 @app.route("/read-file", methods=["POST"])
 def read_file():
@@ -115,61 +118,71 @@ def read_file():
 
             pdf.close()
 
-            #Converting chunk into vectors
-            chunkEmbedding=[]
+            # Converting chunk into vectors
+            chunkEmbedding = []
             for chunk in chunks:
-                embedding=createEmbedding(chunk)
-                chunkEmbedding.append({
-                    "text":chunk,
-                    "embedding":embedding
-                })
+                embedding = createEmbedding(chunk)
+                chunkEmbedding.append({"text": chunk, "embedding": embedding})
 
-            #user input question
-            question=request.form.get('question')
+            # user input question
+            question = request.form.get("question")
 
-            #converting question into vectors
+            # converting question into vectors
             questionEmbedding = createEmbedding(question)
 
-            #finding best or similar chunk a/c to question
+            # finding best or similar chunk a/c to question
             bestChunk = None
-            bestScore = float('-inf')
+            bestScore = float("-inf")
 
             for items in chunkEmbedding:
-                score = cosineSimilarity(questionEmbedding,items['embedding'])
+                score = cosineSimilarity(questionEmbedding, items["embedding"])
                 if score > bestScore:
-                    bestChunk = items['text']
+                    bestChunk = items["text"]
                     bestScore = score
 
             print(bestScore)
             print(bestChunk)
 
             response = llm.models.generate_content(
-                        model="gemini-3.5-flash-lite",
-                        contents=f"answer the question using context: {bestChunk} and question is {question}"
-                    )
+                model="gemini-3.5-flash-lite",
+                contents=f"answer the question using context: {bestChunk} and question is {question}",
+            )
 
         # Extract text from Word documents
         elif extension == ".docx":
             document = Document(BytesIO(file_bytes))
-            content = "\n".join(
-                paragraph.text
-                for paragraph in document.paragraphs
-            )
+            content = "\n".join(paragraph.text for paragraph in document.paragraphs)
 
         else:
-            return jsonify({
-                "error": "Unsupported file type. Use TXT, CSV, JSON, MD, PDF, or DOCX."
-            }), 415
+            return (
+                jsonify(
+                    {
+                        "error": "Unsupported file type. Use TXT, CSV, JSON, MD, PDF, or DOCX."
+                    }
+                ),
+                415,
+            )
 
-        return jsonify({
-            "filename": file.filename,
-            "content": response.text,
-        }), 200
+        return (
+            jsonify(
+                {
+                    "filename": file.filename,
+                    "content": response.text,
+                }
+            ),
+            200,
+        )
 
     except Exception:
-        return jsonify({
-            "error": "Unable to extract text from this file. Check that the file is valid and not corrupted."
-        }), 400
+        return (
+            jsonify(
+                {
+                    "error": "Unable to extract text from this file. Check that the file is valid and not corrupted."
+                }
+            ),
+            400,
+        )
+
 
 if __name__ == "__main__":
     app.run(host="127.0.0.1", port=5000, debug=True)
